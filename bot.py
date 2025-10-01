@@ -1,34 +1,27 @@
 import os
-import threading
-from aiohttp import web
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]  # e.g. https://tg-bot.onrender.com
 
-# --- tiny web server for Render's port scan ---
-async def _ok(_request):
-    return web.Response(text="ok")
-
-def start_web_server():
-    app = web.Application()
-    app.router.add_get("/", _ok)
-    app.router.add_get("/healthz", _ok)
-    port = int(os.environ.get("PORT", "10000"))
-    web.run_app(app, port=port)
-
-# --- telegram bot ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome! You started the bot.")
 
 def main():
-    # start the web server in the background
-    threading.Thread(target=start_web_server, daemon=True).start()
-
-    # start the bot (long polling)
+    port = int(os.environ.get("PORT", "10000"))
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.run_polling(drop_pending_updates=True, close_loop=False)
+
+    # this starts an HTTP server and registers the Telegram webhook
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=BOT_TOKEN,  # secret-ish path
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+        drop_pending_updates=True,
+        close_loop=False,
+    )
 
 if __name__ == "__main__":
     main()
